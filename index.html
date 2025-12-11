@@ -2,246 +2,271 @@
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>視藝科魔法畫板 (圖庫版)</title>
+    <title>Mac 輕量極速版眼球畫布</title>
+    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
     <style>
-        /* --- 基礎設定 --- */
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background-color: #000; /* 全黑背景 */
-            font-family: "Microsoft JhengHei", sans-serif; 
-            touch-action: none; /* 防止觸控時螢幕移動 */
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #111;
+            display: flex; height: 100vh;
+            font-family: "微軟正黑體", sans-serif;
         }
 
-        /* 畫布與結果層 */
-        #canvas { 
-            display: block; 
-            position: absolute; 
-            top: 0; left: 0; 
-            z-index: 5; 
-            cursor: crosshair;
-            transition: opacity 1s ease; /* 淡出效果 */
+        /* --- 左側顏色選單 --- */
+        #sidebar {
+            /* 固定寬度，方便數學計算 */
+            width: 200px; 
+            background: #222;
+            display: flex; flex-direction: column;
+            padding: 5px; box-sizing: border-box;
+            z-index: 20;
+            border-right: 2px solid #444;
+        }
+
+        .color-btn {
+            flex: 1; /* 平均分配高度 */
+            margin-bottom: 5px;
+            border-radius: 8px;
+            border: 4px solid #333; 
+            transition: transform 0.1s; /* 減少特效運算 */
+            opacity: 0.6;
+        }
+
+        .color-btn.active {
+            border-color: white; 
+            transform: scale(1.02);
+            opacity: 1;
+            z-index: 10;
+        }
+
+        /* --- 右側畫布區 --- */
+        #canvas-container { flex: 1; position: relative; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+
+        /* --- 眼動紅點 --- */
+        #gaze-dot {
+            position: fixed; width: 30px; height: 30px;
+            background: rgba(255, 0, 0, 0.5); 
+            border-radius: 50%;
+            border: 2px solid white;
+            z-index: 9999; pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+
+        /* --- 介面元件 --- */
+        #start-overlay {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.95); z-index: 100;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            color: white; text-align: center;
         }
         
-        #result-container {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 1; /* 在畫布下面 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #000;
+        #reset-btn {
+            position: absolute; bottom: 20px; right: 20px;
+            padding: 15px 40px; font-size: 24px;
+            background: #333; color: white;
+            border: 3px solid #555; border-radius: 50px;
+            z-index: 50; display: none; cursor: pointer;
         }
 
-        #result-image {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            opacity: 0; /* 一開始是透明的 */
-            transition: opacity 2s ease; /* 慢慢浮現 */
-        }
-
-        /* --- 按鈕介面 --- */
-        #controls {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            z-index: 100;
-        }
-
-        .btn {
-            border: 4px solid #fff;
-            padding: 15px 40px;
-            font-size: 28px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: bold;
-            color: white;
-            box-shadow: 0 0 15px rgba(255,255,255,0.8);
-            transition: transform 0.1s;
-        }
-
-        .btn:active { transform: scale(0.95); }
-
-        .btn-magic { 
-            background: linear-gradient(45deg, #ff0055, #ff9900); 
-            font-size: 32px; /* 魔法按鈕大一點 */
-        } 
-        
-        .btn-reset { 
-            background-color: #0066ff; 
-        }
-
-        /* 給老師的提示 */
-        #teacher-hint {
-            position: absolute; top: 10px; left: 10px; color: #555; font-size: 12px; pointer-events: none;
+        #webgazerVideoContainer {
+            top: 10px !important; right: 10px !important; left: auto !important;
+            width: 160px !important; height: auto !important;
+            opacity: 0.8; border: 2px solid white; pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-    <div id="teacher-hint">老師設定：請在代碼中修改 imageUrls 陣列來更換圖片</div>
+    <div id="gaze-dot"></div>
 
-    <div id="result-container">
-        <img id="result-image" src="" alt="魔法圖片">
+    <div id="start-overlay">
+        <h1 style="font-size: 40px;">Mac 輕量版 (高效能)</h1>
+        <p style="font-size: 24px; color: #aaa;">滑鼠點擊四角校正 -> 即看即畫</p>
+        <button onclick="startGame()" style="padding: 15px 40px; font-size: 24px; margin-top: 30px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 10px;">點擊開始</button>
     </div>
 
-    <canvas id="canvas"></canvas>
+    <div id="sidebar"></div>
 
-    <div id="controls">
-        <button class="btn btn-reset" onclick="resetCanvas()">重新來過</button>
-        <button class="btn btn-magic" onclick="doMagic()">✨ 變身！</button>
+    <div id="canvas-container">
+        <canvas id="paint-canvas"></canvas>
+        <button id="reset-btn">清除重畫</button>
     </div>
 
-<script>
-    // ==========================================
-    // 🎨 老師專用設定區 (TEACHER SETTINGS)
-    // ==========================================
-    
-    // 請在這裡放入您想讓學生「變」出來的圖片網址。
-    // 可以是網上找的圖，也可以是您上傳到 Google Drive/Imgur 的圖。
-    // 這裡我先預設了幾張高對比、漂亮的「蝴蝶」與「星空」圖片。
-    
-    const imageUrls = [
-        "https://images.unsplash.com/photo-1557401614-7471239c063c?q=80&w=2000&auto=format&fit=crop", // 霓虹蝴蝶
-        "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?q=80&w=2000&auto=format&fit=crop", // 晨光風景
-        "https://images.unsplash.com/photo-1463852247062-1bbca38f7805?q=80&w=2000&auto=format&fit=crop", // 鮮豔花朵
-        "https://images.unsplash.com/photo-1535591273668-578e31182c4f?q=80&w=2000&auto=format&fit=crop", // 宇宙星空
-        "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2000&auto=format&fit=crop"  // 賽博龐克風格
-    ];
-
-    // ==========================================
-    // 程式邏輯區
-    // ==========================================
-
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const resultImg = document.getElementById('result-image');
-
-    // 設定全螢幕
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
-    // 筆刷設定 (適合視障的高對比)
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 40; // 預設粗細
-    let hue = 0; // 顏色輪
-
-    let isDrawing = false;
-    let lastX = 0;
-    let lastY = 0;
-    let hasDrawn = false; // 偵測學生有沒有動過筆
-
-    // 繪圖函式
-    function draw(x, y) {
-        // 變色效果：隨時間變成彩虹色
-        ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
-        ctx.shadowBlur = 20; // 發光效果
-        ctx.shadowColor = `hsl(${hue}, 100%, 60%)`;
+    <script>
+        const canvas = document.getElementById('paint-canvas');
+        const ctx = canvas.getContext('2d');
+        const sidebar = document.getElementById('sidebar');
+        const startOverlay = document.getElementById('start-overlay');
+        const resetBtn = document.getElementById('reset-btn');
+        const gazeDot = document.getElementById('gaze-dot');
         
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+        const palette = [
+            { name: '火紅', color: '#FF0000', shadow: '#FF4500' },
+            { name: '亮橘', color: '#FF8C00', shadow: '#FFA500' },
+            { name: '金黃', color: '#FFD700', shadow: '#FFFF00' },
+            { name: '螢光綠', color: '#00FF00', shadow: '#ADFF2F' },
+            { name: '青空藍', color: '#00BFFF', shadow: '#00FFFF' },
+            { name: '深海藍', color: '#0000FF', shadow: '#4169E1' },
+            { name: '魔幻紫', color: '#8A2BE2', shadow: '#FF00FF' },
+            { name: '彩虹', color: 'rainbow', shadow: 'white' }
+        ];
 
-        hue++; // 顏色變換
-        if (hue >= 360) hue = 0;
-
-        lastX = x;
-        lastY = y;
-        hasDrawn = true;
-    }
-
-    // --- 輸入事件處理 (支援滑鼠/眼動儀/觸控) ---
-    
-    function startPosition(e) {
-        isDrawing = true;
-        // 取得座標 (兼容滑鼠與觸控)
-        if (e.touches) {
-            lastX = e.touches[0].clientX;
-            lastY = e.touches[0].clientY;
-        } else {
-            lastX = e.offsetX;
-            lastY = e.offsetY;
-        }
-    }
-
-    function movePosition(e) {
-        // 特別設計：對於眼動儀，通常沒有「按住」動作
-        // 所以我們設定：只要滑鼠在動，且之前有「進入」過畫面，就視為繪畫
-        // 或者您可以簡單地讓它「永遠都在畫」
+        let currentColor = palette[0];
+        let activeIndex = 0; // 記錄當前選中的是第幾個按鈕
+        let lastX = null;
+        let lastY = null;
+        let lastToneTime = 0; // 音效冷卻
         
-        // 這裡設定：只要移動就畫 (適合嚴重肢體障礙)
-        let clientX, clientY;
-        
-        if (e.touches) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        } else {
-            clientX = e.offsetX;
-            clientY = e.offsetY;
+        // 選單寬度設定 (必須與 CSS #sidebar width 一致)
+        const MENU_WIDTH = 200; 
+
+        // --- 初始化 UI ---
+        function initUI() {
+            palette.forEach((item, index) => {
+                const btn = document.createElement('div');
+                btn.className = 'color-btn';
+                // 不需要 ID 了，我們用數學算
+                
+                if (item.color === 'rainbow') {
+                    btn.style.background = 'linear-gradient(180deg, red, orange, yellow, green, blue, indigo, violet)';
+                } else {
+                    btn.style.background = item.color;
+                }
+                
+                if (index === 0) btn.classList.add('active');
+                sidebar.appendChild(btn);
+            });
+            resizeCanvas();
         }
 
-        // 如果是剛開始移動，先重置起點
-        if (!isDrawing) {
-            lastX = clientX;
-            lastY = clientY;
-            isDrawing = true;
-        }
-        
-        draw(clientX, clientY);
-    }
-
-    // 綁定事件
-    canvas.addEventListener('mousemove', movePosition);
-    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); movePosition(e); }, { passive: false });
-
-    // ==========================================
-    // ✨ 變身邏輯
-    // ==========================================
-    function doMagic() {
-        if (!hasDrawn) {
-            // 雖然沒畫也可以變，但最好鼓勵畫一下，這裡不做限制
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
         }
 
-        // 1. 隨機選一張圖
-        const randomImage = imageUrls[Math.floor(Math.random() * imageUrls.length)];
-        resultImg.src = randomImage;
+        // --- 音效 (Mac Safari 優化) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq) {
+            // 音效節流：避免聲音太密集導致卡頓
+            const now = Date.now();
+            if (now - lastToneTime < 150) return; 
+            lastToneTime = now;
 
-        // 2. 視覺特效：畫布慢慢消失，圖片慢慢浮現
-        canvas.style.opacity = '0'; // 畫布變透明
-        resultImg.style.opacity = '1'; // 圖片變實體
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.value = freq;
+            osc.type = 'triangle'; // 三角波比較省資源且好聽
+            
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
 
-        // (可選) 這裡可以加入音效播放
-        // let audio = new Audio('magic-sound.mp3');
-        // audio.play();
-    }
+        // --- 繪圖邏輯 ---
+        function draw(x, y) {
+            const rect = canvas.getBoundingClientRect();
+            const cx = x - rect.left;
+            const cy = y - rect.top;
 
-    function resetCanvas() {
-        // 清除畫面
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (lastX !== null && (Math.abs(cx - lastX) > 200 || Math.abs(cy - lastY) > 200)) {
+                lastX = cx; lastY = cy; return;
+            }
+
+            if (lastX !== null) {
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(cx, cy);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 15 + Math.random() * 25; // 稍微細一點，減輕負擔
+
+                if (currentColor.color === 'rainbow') {
+                    const hue = Math.floor(Math.random() * 360);
+                    ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+                } else {
+                    ctx.strokeStyle = currentColor.color;
+                }
+                
+                // 移除陰影運算 (shadowBlur)，這是造成 Mac 卡頓的主因之一
+                // ctx.shadowBlur = 10; 
+                
+                ctx.stroke();
+            }
+            lastX = cx; lastY = cy;
+        }
+
+        // --- 更新選單 UI (手動切換 class) ---
+        function updateMenuUI(newIndex) {
+            if (newIndex === activeIndex) return; // 沒變就不動，省資源
+            
+            const btns = document.querySelectorAll('.color-btn');
+            btns[activeIndex].classList.remove('active');
+            btns[newIndex].classList.add('active');
+            
+            activeIndex = newIndex;
+            currentColor = palette[newIndex];
+            playTone(800); // 換色提示音
+        }
+
+        function startGame() {
+            startOverlay.style.display = 'none';
+            resetBtn.style.display = 'block';
+            initUI();
+
+            webgazer.setRegression('ridge')
+                .setGazeListener(function(data, clock) {
+                    if (data == null) return;
+
+                    // 1. 移動紅點
+                    gazeDot.style.left = data.x + 'px';
+                    gazeDot.style.top = data.y + 'px';
+
+                    // 2. 超高速邏輯判斷 (取代 elementFromPoint)
+                    // 直接判斷 X 座標是否在左側 200px 內
+                    if (data.x < MENU_WIDTH) {
+                        
+                        // --- 進入選單區 ---
+                        lastX = null; // 停止繪畫
+                        
+                        // 計算現在看著第幾個按鈕 (Y座標 / 按鈕高度)
+                        const btnHeight = window.innerHeight / 8; // 因為有 8 個按鈕
+                        let targetIndex = Math.floor(data.y / btnHeight);
+                        
+                        // 防止邊界錯誤 (看太上面或太下面)
+                        if (targetIndex < 0) targetIndex = 0;
+                        if (targetIndex > 7) targetIndex = 7;
+                        
+                        // 更新 UI
+                        updateMenuUI(targetIndex);
+
+                    } else {
+                        // --- 進入畫布區 ---
+                        draw(data.x, data.y);
+                    }
+                })
+                .begin();
+
+            webgazer.showVideoPreview(true);
+        }
+
+        resetBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            lastX = null;
+        });
         
-        // 恢復狀態
-        canvas.style.opacity = '1';
-        resultImg.style.opacity = '0';
-        
-        isDrawing = false;
-        hasDrawn = false;
-        
-        // 更換顏色起始點，增加新鮮感
-        hue = Math.random() * 360;
-    }
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
 
-</script>
+    </script>
 </body>
 </html>
